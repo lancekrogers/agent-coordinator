@@ -29,6 +29,15 @@ const (
 
 	// MessageTypePnLReport is sent by the DeFi agent with profit/loss data.
 	MessageTypePnLReport MessageType = "pnl_report"
+
+	// MessageTypeRiskCheckRequested is sent when the coordinator requests a CRE risk evaluation.
+	MessageTypeRiskCheckRequested MessageType = "risk_check_requested"
+
+	// MessageTypeRiskCheckApproved is sent when CRE approves a trade.
+	MessageTypeRiskCheckApproved MessageType = "risk_check_approved"
+
+	// MessageTypeRiskCheckDenied is sent when CRE denies a trade.
+	MessageTypeRiskCheckDenied MessageType = "risk_check_denied"
 )
 
 // Envelope is the standard message format for all festival protocol messages

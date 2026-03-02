@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 
 	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
+	"github.com/lancekrogers/agent-coordinator-ethden-2026/pkg/creclient"
 )
 
 // TaskAssignmentPayload is the payload for a task assignment message.
@@ -32,6 +34,8 @@ type Assigner struct {
 	publisher hcs.MessagePublisher
 	topicID   hiero.TopicID
 	agentIDs  []string
+	creClient *creclient.Client // optional CRE Risk Router client
+	logger    *slog.Logger
 
 	mu          sync.RWMutex
 	assignments map[string]string // taskID -> agentID
@@ -45,7 +49,13 @@ func NewAssigner(publisher hcs.MessagePublisher, topicID hiero.TopicID, agentIDs
 		topicID:     topicID,
 		agentIDs:    agentIDs,
 		assignments: make(map[string]string),
+		logger:      slog.Default(),
 	}
+}
+
+// SetCREClient configures the optional CRE Risk Router client for DeFi task risk checks.
+func (a *Assigner) SetCREClient(client *creclient.Client) {
+	a.creClient = client
 }
 
 // AssignTasks publishes task assignments for all tasks in the plan.
@@ -88,6 +98,26 @@ func (a *Assigner) AssignTask(ctx context.Context, taskID string, agentID string
 func (a *Assigner) assignPlanTask(ctx context.Context, task PlanTask, agentID string) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("assign task %s to %s: %w", task.ID, agentID, err)
+	}
+
+	// CRE risk check for DeFi tasks
+	if isDeFiTask(task) && a.creClient != nil {
+		decision, err := a.creClient.EvaluateRisk(ctx, creclient.RiskRequest{
+			AgentID:   agentID,
+			TaskID:    task.ID,
+			Signal:    "buy",
+			RiskScore: task.Priority, // use priority as risk proxy
+			Timestamp: time.Now().Unix(),
+		})
+		if err != nil {
+			a.logger.Warn("CRE risk check failed, blocking task", "task_id", task.ID, "error", err)
+			return fmt.Errorf("assign task %s: CRE check failed: %w", task.ID, err)
+		}
+		if !decision.Approved {
+			a.logger.Info("CRE denied task", "task_id", task.ID, "reason", decision.Reason)
+			return fmt.Errorf("assign task %s: CRE denied: %s", task.ID, decision.Reason)
+		}
+		a.logger.Info("CRE approved task", "task_id", task.ID, "max_position", decision.MaxPositionUSD)
 	}
 
 	payload := TaskAssignmentPayload{
@@ -145,6 +175,11 @@ func (a *Assigner) AssignmentCount() int {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return len(a.assignments)
+}
+
+// isDeFiTask returns true if the task involves DeFi trade execution.
+func isDeFiTask(task PlanTask) bool {
+	return task.TaskType == "defi" || task.TaskType == "trade"
 }
 
 // Compile-time interface compliance check.
