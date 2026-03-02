@@ -79,11 +79,13 @@ func (a *Assigner) AssignTasks(ctx context.Context, plan Plan) ([]string, error)
 				agentIdx++
 			}
 
-			if err := a.assignPlanTask(ctx, task, agentID); err != nil {
+			assigned, err := a.assignPlanTask(ctx, task, agentID)
+			if err != nil {
 				return assignedIDs, fmt.Errorf("assign tasks: task %s: %w", task.ID, err)
 			}
-
-			assignedIDs = append(assignedIDs, task.ID)
+			if assigned {
+				assignedIDs = append(assignedIDs, task.ID)
+			}
 		}
 	}
 
@@ -92,12 +94,13 @@ func (a *Assigner) AssignTasks(ctx context.Context, plan Plan) ([]string, error)
 
 // AssignTask assigns a single task to a specific agent via HCS.
 func (a *Assigner) AssignTask(ctx context.Context, taskID string, agentID string) error {
-	return a.assignPlanTask(ctx, PlanTask{ID: taskID}, agentID)
+	_, err := a.assignPlanTask(ctx, PlanTask{ID: taskID}, agentID)
+	return err
 }
 
-func (a *Assigner) assignPlanTask(ctx context.Context, task PlanTask, agentID string) error {
+func (a *Assigner) assignPlanTask(ctx context.Context, task PlanTask, agentID string) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("assign task %s to %s: %w", task.ID, agentID, err)
+		return false, fmt.Errorf("assign task %s to %s: %w", task.ID, agentID, err)
 	}
 
 	// CRE risk check for DeFi tasks (fail-open: log and continue on CRE errors).
@@ -120,7 +123,7 @@ func (a *Assigner) assignPlanTask(ctx context.Context, task PlanTask, agentID st
 			a.logger.Info("CRE denied task, skipping assignment",
 				"task_id", task.ID, "reason", decision.Reason)
 			a.publishRiskEvent(ctx, task.ID, agentID, hcs.MessageTypeRiskCheckDenied, decision.Reason)
-			return nil // skip this task, don't abort the loop
+			return false, nil // skip this task, don't abort the loop
 		} else {
 			a.logger.Info("CRE approved task",
 				"task_id", task.ID, "max_position", decision.MaxPositionUSD)
@@ -142,7 +145,7 @@ func (a *Assigner) assignPlanTask(ctx context.Context, task PlanTask, agentID st
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("assign task %s to %s: marshal payload: %w", task.ID, agentID, err)
+		return false, fmt.Errorf("assign task %s to %s: marshal payload: %w", task.ID, agentID, err)
 	}
 
 	a.mu.Lock()
@@ -161,14 +164,14 @@ func (a *Assigner) assignPlanTask(ctx context.Context, task PlanTask, agentID st
 	}
 
 	if err := a.publisher.Publish(ctx, a.topicID, env); err != nil {
-		return fmt.Errorf("assign task %s to %s: publish: %w", task.ID, agentID, err)
+		return false, fmt.Errorf("assign task %s to %s: publish: %w", task.ID, agentID, err)
 	}
 
 	a.mu.Lock()
 	a.assignments[task.ID] = agentID
 	a.mu.Unlock()
 
-	return nil
+	return true, nil
 }
 
 // Assignment returns the agent ID assigned to a task, or empty string if unassigned.

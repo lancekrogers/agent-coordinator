@@ -2,10 +2,16 @@ package coordinator
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
+
+	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
+	"github.com/lancekrogers/agent-coordinator-ethden-2026/pkg/creclient"
 )
 
 func TestAssigner_ContextCancellation(t *testing.T) {
@@ -238,5 +244,80 @@ func TestConfig_Validate(t *testing.T) {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// mockPublisher records Publish calls for testing.
+type mockPublisher struct {
+	calls []hcs.Envelope
+}
+
+func (m *mockPublisher) Publish(_ context.Context, _ hiero.TopicID, msg hcs.Envelope) error {
+	m.calls = append(m.calls, msg)
+	return nil
+}
+
+func TestAssignTasks_CREDeniedTaskNotInAssignedIDs(t *testing.T) {
+	// CRE server: deny task-defi-1, approve task-defi-2.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req creclient.RiskRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		decision := creclient.RiskDecision{
+			Approved:       req.TaskID != "task-defi-1",
+			MaxPositionUSD: 1000_000000,
+			MaxSlippageBps: 50,
+			TTLSeconds:     300,
+			Reason:         "test",
+		}
+		if !decision.Approved {
+			decision.Reason = "denied by test"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(decision)
+	}))
+	defer srv.Close()
+
+	pub := &mockPublisher{}
+	a := NewAssigner(pub, hiero.TopicID{Topic: 1}, []string{"agent-1"})
+	a.SetCREClient(creclient.New(srv.URL, 5*time.Second))
+
+	plan := Plan{
+		FestivalID: "test-fest",
+		Sequences: []PlanSequence{
+			{
+				ID: "seq-1",
+				Tasks: []PlanTask{
+					{ID: "task-defi-1", TaskType: "defi", Name: "denied trade"},
+					{ID: "task-defi-2", TaskType: "defi", Name: "approved trade"},
+				},
+			},
+		},
+	}
+
+	assignedIDs, err := a.AssignTasks(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("AssignTasks returned error: %v", err)
+	}
+
+	// Only the approved task should appear in assignedIDs.
+	if len(assignedIDs) != 1 {
+		t.Fatalf("expected 1 assigned ID, got %d: %v", len(assignedIDs), assignedIDs)
+	}
+	if assignedIDs[0] != "task-defi-2" {
+		t.Errorf("expected assigned ID task-defi-2, got %s", assignedIDs[0])
+	}
+
+	// Only the approved task should be tracked in assignments.
+	if a.AssignmentCount() != 1 {
+		t.Errorf("expected AssignmentCount() == 1, got %d", a.AssignmentCount())
+	}
+	if got := a.Assignment("task-defi-1"); got != "" {
+		t.Errorf("denied task should not be assigned, got agent %q", got)
+	}
+	if got := a.Assignment("task-defi-2"); got != "agent-1" {
+		t.Errorf("approved task should be assigned to agent-1, got %q", got)
 	}
 }
