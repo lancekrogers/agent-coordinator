@@ -81,7 +81,7 @@ func main() {
 		assigner.SetCREClient(creClient)
 		log.Info("CRE Risk Router enabled", "endpoint", creEndpoint)
 	} else {
-		log.Info("CRE Risk Router not configured, DeFi tasks bypass risk checks")
+		log.Warn("CRE Risk Router not configured, DeFi tasks will be denied (fail-closed)")
 	}
 	monitor := coordinator.NewMonitor(subscriber, cfg.Coordinator.StatusTopicID, nil)
 	payment := coordinator.NewPayment(transferSvc, publisher, cfg.Coordinator)

@@ -3,6 +3,7 @@ package creclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -74,6 +75,9 @@ func TestEvaluateRisk_ServerError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 500 response")
 	}
+	if !errors.Is(err, ErrUnexpectedStatus) {
+		t.Fatalf("expected ErrUnexpectedStatus, got %v", err)
+	}
 }
 
 func TestEvaluateRisk_ContextCancellation(t *testing.T) {
@@ -91,6 +95,9 @@ func TestEvaluateRisk_ContextCancellation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for cancelled context")
 	}
+	if !errors.Is(err, ErrRequestFailed) {
+		t.Fatalf("expected ErrRequestFailed, got %v", err)
+	}
 }
 
 func TestEvaluateRisk_MalformedResponse(t *testing.T) {
@@ -104,5 +111,22 @@ func TestEvaluateRisk_MalformedResponse(t *testing.T) {
 	_, err := client.EvaluateRisk(context.Background(), RiskRequest{})
 	if err == nil {
 		t.Fatal("expected error for malformed response")
+	}
+	if !errors.Is(err, ErrDecodeFailed) {
+		t.Fatalf("expected ErrDecodeFailed, got %v", err)
+	}
+}
+
+func TestNew_NormalizesEndpointDefaultPath(t *testing.T) {
+	client := New("http://localhost:8080", 5*time.Second)
+	if client.endpoint != "http://localhost:8080/evaluate-risk" {
+		t.Fatalf("endpoint = %q, want %q", client.endpoint, "http://localhost:8080/evaluate-risk")
+	}
+}
+
+func TestNew_PreservesCustomPath(t *testing.T) {
+	client := New("http://localhost:8080/evaluate", 5*time.Second)
+	if client.endpoint != "http://localhost:8080/evaluate" {
+		t.Fatalf("endpoint = %q, want %q", client.endpoint, "http://localhost:8080/evaluate")
 	}
 }

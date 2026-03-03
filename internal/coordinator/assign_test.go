@@ -321,3 +321,148 @@ func TestAssignTasks_CREDeniedTaskNotInAssignedIDs(t *testing.T) {
 		t.Errorf("approved task should be assigned to agent-1, got %q", got)
 	}
 }
+
+func TestAssignTasks_DeFiDeniedWhenCRENotConfigured(t *testing.T) {
+	pub := &mockPublisher{}
+	a := NewAssigner(pub, hiero.TopicID{Topic: 1}, []string{"agent-1"})
+
+	plan := Plan{
+		FestivalID: "test-fest",
+		Sequences: []PlanSequence{
+			{
+				ID: "seq-1",
+				Tasks: []PlanTask{
+					{ID: "task-defi-1", TaskType: "execute_trade", Name: "trade without cre"},
+				},
+			},
+		},
+	}
+
+	assignedIDs, err := a.AssignTasks(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("AssignTasks returned error: %v", err)
+	}
+	if len(assignedIDs) != 0 {
+		t.Fatalf("expected 0 assigned IDs, got %v", assignedIDs)
+	}
+	if a.AssignmentCount() != 0 {
+		t.Fatalf("expected AssignmentCount() == 0, got %d", a.AssignmentCount())
+	}
+	if len(pub.calls) != 1 {
+		t.Fatalf("expected 1 publish call (risk denied), got %d", len(pub.calls))
+	}
+	if pub.calls[0].Type != hcs.MessageTypeRiskCheckDenied {
+		t.Fatalf("expected risk_check_denied, got %s", pub.calls[0].Type)
+	}
+}
+
+func TestAssignTasks_DeFiDeniedWhenCREReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	pub := &mockPublisher{}
+	a := NewAssigner(pub, hiero.TopicID{Topic: 1}, []string{"agent-1"})
+	a.SetCREClient(creclient.New(srv.URL, 5*time.Second))
+
+	plan := Plan{
+		FestivalID: "test-fest",
+		Sequences: []PlanSequence{
+			{
+				ID: "seq-1",
+				Tasks: []PlanTask{
+					{ID: "task-defi-1", TaskType: "execute_trade", Name: "trade with cre 500"},
+				},
+			},
+		},
+	}
+
+	assignedIDs, err := a.AssignTasks(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("AssignTasks returned error: %v", err)
+	}
+	if len(assignedIDs) != 0 {
+		t.Fatalf("expected 0 assigned IDs, got %v", assignedIDs)
+	}
+	if a.AssignmentCount() != 0 {
+		t.Fatalf("expected AssignmentCount() == 0, got %d", a.AssignmentCount())
+	}
+	if len(pub.calls) != 1 {
+		t.Fatalf("expected 1 publish call (risk denied), got %d", len(pub.calls))
+	}
+	if pub.calls[0].Type != hcs.MessageTypeRiskCheckDenied {
+		t.Fatalf("expected risk_check_denied, got %s", pub.calls[0].Type)
+	}
+}
+
+func TestAssignTasks_ApprovedIncludesCREDecisionPayload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		decision := creclient.RiskDecision{
+			Approved:       true,
+			MaxPositionUSD: 810000000,
+			MaxSlippageBps: 250,
+			TTLSeconds:     300,
+			Reason:         "approved",
+			Timestamp:      1700000000,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(decision)
+	}))
+	defer srv.Close()
+
+	pub := &mockPublisher{}
+	a := NewAssigner(pub, hiero.TopicID{Topic: 1}, []string{"agent-1"})
+	a.SetCREClient(creclient.New(srv.URL, 5*time.Second))
+
+	plan := Plan{
+		FestivalID: "test-fest",
+		Sequences: []PlanSequence{
+			{
+				ID: "seq-1",
+				Tasks: []PlanTask{
+					{ID: "task-defi-1", TaskType: "execute_trade", Name: "approved trade"},
+				},
+			},
+		},
+	}
+
+	assignedIDs, err := a.AssignTasks(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("AssignTasks returned error: %v", err)
+	}
+	if len(assignedIDs) != 1 || assignedIDs[0] != "task-defi-1" {
+		t.Fatalf("unexpected assigned IDs: %v", assignedIDs)
+	}
+
+	var assignmentEnv *hcs.Envelope
+	for i := range pub.calls {
+		if pub.calls[i].Type == hcs.MessageTypeTaskAssignment {
+			assignmentEnv = &pub.calls[i]
+			break
+		}
+	}
+	if assignmentEnv == nil {
+		t.Fatal("expected task_assignment envelope")
+	}
+
+	var payload TaskAssignmentPayload
+	if err := json.Unmarshal(assignmentEnv.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal assignment payload: %v", err)
+	}
+	if payload.CREDecision == nil {
+		t.Fatal("expected cre_decision payload to be present")
+	}
+	if payload.CREDecision.MaxPositionUSD != 810000000 {
+		t.Fatalf("max_position_usd = %d, want 810000000", payload.CREDecision.MaxPositionUSD)
+	}
+	if payload.CREDecision.MaxSlippageBps != 250 {
+		t.Fatalf("max_slippage_bps = %d, want 250", payload.CREDecision.MaxSlippageBps)
+	}
+	if payload.CREDecision.TTLSeconds != 300 {
+		t.Fatalf("ttl_seconds = %d, want 300", payload.CREDecision.TTLSeconds)
+	}
+	if payload.CREDecision.DecisionTimestamp != 1700000000 {
+		t.Fatalf("decision_timestamp = %d, want 1700000000", payload.CREDecision.DecisionTimestamp)
+	}
+}

@@ -92,6 +92,7 @@ just hedera show-config    # prints the generated .env values
 | `HCS_TASK_TOPIC_ID` | HCS topic for task assignments |
 | `HCS_STATUS_TOPIC_ID` | HCS topic for status updates |
 | `HTS_PAYMENT_TOKEN_ID` | HTS fungible token for payments |
+| `CRE_ENDPOINT` | CRE bridge HTTP endpoint (defaults to `/evaluate-risk` path if none is supplied) |
 | `DAEMON_ADDRESS` | Daemon gRPC address (default: localhost:50051) |
 | `DAEMON_TLS_ENABLED` | Enable TLS for daemon connection |
 
@@ -157,7 +158,7 @@ just hedera show-config    # Display Hedera env vars
 - **ResultHandler** -- processes `task_result` and `pnl_report` messages, triggers payment on completion
 - **Payment** -- executes HTS token transfers from the treasury to agent accounts, publishes settlement confirmations
 - **QualityGate** -- validates task completion criteria before authorizing payment
-- **CREClient** -- calls the CRE Risk Router to evaluate DeFi/trade tasks before assignment; denied tasks are blocked from execution
+- **CREClient** -- calls the CRE Risk Router to evaluate DeFi/trade tasks before assignment; coordinator runs fail-closed for DeFi tasks (no CRE decision means no assignment)
 
 All state management is thread-safe with `sync.RWMutex`. Context propagation ensures clean shutdown across all goroutines.
 
