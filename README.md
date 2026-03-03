@@ -1,5 +1,9 @@
 # agent-coordinator
 
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Hedera](https://img.shields.io/badge/Hedera-HCS%20%2B%20HTS-8259EF?logo=hedera)](https://hedera.com)
+[![gRPC](https://img.shields.io/badge/gRPC-Protobuf-244c5a?logo=grpc)](https://grpc.io)
+
 Task orchestration agent for a multi-agent autonomous economy on Hedera.
 
 Part of the [ETHDenver 2026 Agent Economy](../README.md) submission.
@@ -7,6 +11,8 @@ Part of the [ETHDenver 2026 Agent Economy](../README.md) submission.
 ## Overview
 
 The agent-coordinator is the brain of a three-agent autonomous economy. It reads structured task plans, assigns work to specialized AI agents via **Hedera Consensus Service (HCS)**, monitors their progress in real-time, enforces quality gates, and settles payments with **Hedera Token Service (HTS)** upon task completion.
+
+> **TL;DR** — The coordinator reads task plans, assigns work to AI agents via HCS, monitors results, enforces quality gates, and settles payments with HTS tokens. Zero Solidity — all Hedera-native.
 
 The entire system runs without Solidity or EVM contracts. All coordination, messaging, and payments use native Hedera services through the Go SDK (`hiero-sdk-go`), demonstrating that complex multi-agent workflows can be built entirely on Hedera's native layer.
 
@@ -118,22 +124,25 @@ Task state machine: `pending` -> `assigned` -> `in_progress` -> `review` -> `com
 ## Project Structure
 
 ```
-cmd/
-  coordinator/             Coordinator entry point
-  setup-testnet/           Provisions HCS topics + HTS token
-internal/
-  config/                  Config loading and validation
-  coordinator/             Assigner, monitor, payment, result handler, quality gates
-  daemon/                  Daemon RPC client
-  festival/                Festival plan reader
-  hedera/
-    hcs/                   HCS publisher, subscriber, topic lifecycle
-    hts/                   HTS token creation and transfer
-  integration/             E2E integration test helpers
-pkg/creclient/             CRE Risk Router HTTP client (risk evaluation before DeFi task assignment)
-pkg/daemon/                Shared daemon proto bindings
-proto/                     Protobuf definitions
-docs/integration/          Integration test evidence and logs
+agent-coordinator/
+├── cmd/
+│   ├── coordinator/           # Coordinator entry point
+│   └── setup-testnet/         # Provisions HCS topics + HTS token
+├── internal/
+│   ├── config/                # Config loading and validation
+│   ├── coordinator/           # Assigner, monitor, payment, result handler, quality gates
+│   ├── daemon/                # Daemon RPC client
+│   ├── festival/              # Festival plan reader
+│   ├── hedera/
+│   │   ├── hcs/               # HCS publisher, subscriber, topic lifecycle
+│   │   └── hts/               # HTS token creation and transfer
+│   └── integration/           # E2E integration test helpers
+├── pkg/
+│   ├── creclient/             # CRE Risk Router HTTP client (risk evaluation before DeFi task assignment)
+│   └── daemon/                # Shared daemon proto bindings
+├── proto/                     # Protobuf definitions
+└── docs/
+    └── integration/           # Integration test evidence and logs
 ```
 
 ## Development
