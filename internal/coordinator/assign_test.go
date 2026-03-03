@@ -2,10 +2,16 @@ package coordinator
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
+
+	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
+	"github.com/lancekrogers/agent-coordinator-ethden-2026/pkg/creclient"
 )
 
 func TestAssigner_ContextCancellation(t *testing.T) {
@@ -168,6 +174,29 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
+func TestIsDeFiTask(t *testing.T) {
+	tests := []struct {
+		taskType string
+		want     bool
+	}{
+		{"defi", true},
+		{"trade", true},
+		{"execute_trade", true},
+		{"inference", false},
+		{"", false},
+		{"DEFI", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.taskType, func(t *testing.T) {
+			task := PlanTask{TaskType: tt.taskType}
+			if got := isDeFiTask(task); got != tt.want {
+				t.Errorf("isDeFiTask(%q) = %v, want %v", tt.taskType, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestConfig_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -215,5 +244,225 @@ func TestConfig_Validate(t *testing.T) {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// mockPublisher records Publish calls for testing.
+type mockPublisher struct {
+	calls []hcs.Envelope
+}
+
+func (m *mockPublisher) Publish(_ context.Context, _ hiero.TopicID, msg hcs.Envelope) error {
+	m.calls = append(m.calls, msg)
+	return nil
+}
+
+func TestAssignTasks_CREDeniedTaskNotInAssignedIDs(t *testing.T) {
+	// CRE server: deny task-defi-1, approve task-defi-2.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req creclient.RiskRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		decision := creclient.RiskDecision{
+			Approved:       req.TaskID != "task-defi-1",
+			MaxPositionUSD: 1000_000000,
+			MaxSlippageBps: 50,
+			TTLSeconds:     300,
+			Reason:         "test",
+		}
+		if !decision.Approved {
+			decision.Reason = "denied by test"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(decision)
+	}))
+	defer srv.Close()
+
+	pub := &mockPublisher{}
+	a := NewAssigner(pub, hiero.TopicID{Topic: 1}, []string{"agent-1"})
+	a.SetCREClient(creclient.New(srv.URL, 5*time.Second))
+
+	plan := Plan{
+		FestivalID: "test-fest",
+		Sequences: []PlanSequence{
+			{
+				ID: "seq-1",
+				Tasks: []PlanTask{
+					{ID: "task-defi-1", TaskType: "defi", Name: "denied trade"},
+					{ID: "task-defi-2", TaskType: "defi", Name: "approved trade"},
+				},
+			},
+		},
+	}
+
+	assignedIDs, err := a.AssignTasks(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("AssignTasks returned error: %v", err)
+	}
+
+	// Only the approved task should appear in assignedIDs.
+	if len(assignedIDs) != 1 {
+		t.Fatalf("expected 1 assigned ID, got %d: %v", len(assignedIDs), assignedIDs)
+	}
+	if assignedIDs[0] != "task-defi-2" {
+		t.Errorf("expected assigned ID task-defi-2, got %s", assignedIDs[0])
+	}
+
+	// Only the approved task should be tracked in assignments.
+	if a.AssignmentCount() != 1 {
+		t.Errorf("expected AssignmentCount() == 1, got %d", a.AssignmentCount())
+	}
+	if got := a.Assignment("task-defi-1"); got != "" {
+		t.Errorf("denied task should not be assigned, got agent %q", got)
+	}
+	if got := a.Assignment("task-defi-2"); got != "agent-1" {
+		t.Errorf("approved task should be assigned to agent-1, got %q", got)
+	}
+}
+
+func TestAssignTasks_DeFiDeniedWhenCRENotConfigured(t *testing.T) {
+	pub := &mockPublisher{}
+	a := NewAssigner(pub, hiero.TopicID{Topic: 1}, []string{"agent-1"})
+
+	plan := Plan{
+		FestivalID: "test-fest",
+		Sequences: []PlanSequence{
+			{
+				ID: "seq-1",
+				Tasks: []PlanTask{
+					{ID: "task-defi-1", TaskType: "execute_trade", Name: "trade without cre"},
+				},
+			},
+		},
+	}
+
+	assignedIDs, err := a.AssignTasks(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("AssignTasks returned error: %v", err)
+	}
+	if len(assignedIDs) != 0 {
+		t.Fatalf("expected 0 assigned IDs, got %v", assignedIDs)
+	}
+	if a.AssignmentCount() != 0 {
+		t.Fatalf("expected AssignmentCount() == 0, got %d", a.AssignmentCount())
+	}
+	if len(pub.calls) != 1 {
+		t.Fatalf("expected 1 publish call (risk denied), got %d", len(pub.calls))
+	}
+	if pub.calls[0].Type != hcs.MessageTypeRiskCheckDenied {
+		t.Fatalf("expected risk_check_denied, got %s", pub.calls[0].Type)
+	}
+}
+
+func TestAssignTasks_DeFiDeniedWhenCREReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	pub := &mockPublisher{}
+	a := NewAssigner(pub, hiero.TopicID{Topic: 1}, []string{"agent-1"})
+	a.SetCREClient(creclient.New(srv.URL, 5*time.Second))
+
+	plan := Plan{
+		FestivalID: "test-fest",
+		Sequences: []PlanSequence{
+			{
+				ID: "seq-1",
+				Tasks: []PlanTask{
+					{ID: "task-defi-1", TaskType: "execute_trade", Name: "trade with cre 500"},
+				},
+			},
+		},
+	}
+
+	assignedIDs, err := a.AssignTasks(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("AssignTasks returned error: %v", err)
+	}
+	if len(assignedIDs) != 0 {
+		t.Fatalf("expected 0 assigned IDs, got %v", assignedIDs)
+	}
+	if a.AssignmentCount() != 0 {
+		t.Fatalf("expected AssignmentCount() == 0, got %d", a.AssignmentCount())
+	}
+	if len(pub.calls) != 1 {
+		t.Fatalf("expected 1 publish call (risk denied), got %d", len(pub.calls))
+	}
+	if pub.calls[0].Type != hcs.MessageTypeRiskCheckDenied {
+		t.Fatalf("expected risk_check_denied, got %s", pub.calls[0].Type)
+	}
+}
+
+func TestAssignTasks_ApprovedIncludesCREDecisionPayload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		decision := creclient.RiskDecision{
+			Approved:       true,
+			MaxPositionUSD: 810000000,
+			MaxSlippageBps: 250,
+			TTLSeconds:     300,
+			Reason:         "approved",
+			Timestamp:      1700000000,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(decision)
+	}))
+	defer srv.Close()
+
+	pub := &mockPublisher{}
+	a := NewAssigner(pub, hiero.TopicID{Topic: 1}, []string{"agent-1"})
+	a.SetCREClient(creclient.New(srv.URL, 5*time.Second))
+
+	plan := Plan{
+		FestivalID: "test-fest",
+		Sequences: []PlanSequence{
+			{
+				ID: "seq-1",
+				Tasks: []PlanTask{
+					{ID: "task-defi-1", TaskType: "execute_trade", Name: "approved trade"},
+				},
+			},
+		},
+	}
+
+	assignedIDs, err := a.AssignTasks(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("AssignTasks returned error: %v", err)
+	}
+	if len(assignedIDs) != 1 || assignedIDs[0] != "task-defi-1" {
+		t.Fatalf("unexpected assigned IDs: %v", assignedIDs)
+	}
+
+	var assignmentEnv *hcs.Envelope
+	for i := range pub.calls {
+		if pub.calls[i].Type == hcs.MessageTypeTaskAssignment {
+			assignmentEnv = &pub.calls[i]
+			break
+		}
+	}
+	if assignmentEnv == nil {
+		t.Fatal("expected task_assignment envelope")
+	}
+
+	var payload TaskAssignmentPayload
+	if err := json.Unmarshal(assignmentEnv.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal assignment payload: %v", err)
+	}
+	if payload.CREDecision == nil {
+		t.Fatal("expected cre_decision payload to be present")
+	}
+	if payload.CREDecision.MaxPositionUSD != 810000000 {
+		t.Fatalf("max_position_usd = %d, want 810000000", payload.CREDecision.MaxPositionUSD)
+	}
+	if payload.CREDecision.MaxSlippageBps != 250 {
+		t.Fatalf("max_slippage_bps = %d, want 250", payload.CREDecision.MaxSlippageBps)
+	}
+	if payload.CREDecision.TTLSeconds != 300 {
+		t.Fatalf("ttl_seconds = %d, want 300", payload.CREDecision.TTLSeconds)
+	}
+	if payload.CREDecision.DecisionTimestamp != 1700000000 {
+		t.Fatalf("decision_timestamp = %d, want 1700000000", payload.CREDecision.DecisionTimestamp)
 	}
 }

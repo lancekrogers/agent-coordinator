@@ -15,6 +15,7 @@ import (
 	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
 	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hts"
 	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/schedule"
+	"github.com/lancekrogers/agent-coordinator-ethden-2026/pkg/creclient"
 	"github.com/lancekrogers/agent-coordinator-ethden-2026/pkg/daemon"
 )
 
@@ -72,6 +73,16 @@ func main() {
 	// Create coordinator components.
 	agentIDs := []string{"inference-001", "defi-001"}
 	assigner := coordinator.NewAssigner(publisher, cfg.Coordinator.TaskTopicID, agentIDs)
+
+	// Wire CRE Risk Router client (optional — skipped if CRE_ENDPOINT not set).
+	if creEndpoint := os.Getenv("CRE_ENDPOINT"); creEndpoint != "" {
+		creTimeout := 10 * time.Second
+		creClient := creclient.New(creEndpoint, creTimeout)
+		assigner.SetCREClient(creClient)
+		log.Info("CRE Risk Router enabled", "endpoint", creEndpoint)
+	} else {
+		log.Warn("CRE Risk Router not configured, DeFi tasks will be denied (fail-closed)")
+	}
 	monitor := coordinator.NewMonitor(subscriber, cfg.Coordinator.StatusTopicID, nil)
 	payment := coordinator.NewPayment(transferSvc, publisher, cfg.Coordinator)
 
