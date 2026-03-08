@@ -6,7 +6,7 @@
 
 Task orchestration agent for a multi-agent autonomous economy on Hedera.
 
-Part of the [ETHDenver 2026 Agent Economy](../README.md) submission.
+Part of the [Obey Agent Economy](https://github.com/lancekrogers/Obey-Agent-Economy) project.
 
 ## Overview
 
