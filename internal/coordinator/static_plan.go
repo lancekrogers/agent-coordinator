@@ -13,7 +13,7 @@ func IntegrationCyclePlan(inferenceAgentID, defiAgentID string) Plan {
 						ID:            "task-inference-01",
 						Name:          "market_sentiment_analysis",
 						AssignTo:      inferenceAgentID,
-						ModelID:       "test-model",
+						ModelID:       "qwen/qwen-2.5-7b-instruct",
 						Input:         "Analyze market sentiment for ETH",
 						Priority:      1,
 						MaxTokens:     512,

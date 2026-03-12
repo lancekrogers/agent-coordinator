@@ -101,7 +101,7 @@ func (s *Subscriber) subscribeOnce(
 ) error {
 	handle, err := hiero.NewTopicMessageQuery().
 		SetTopicID(topicID).
-		SetStartTime(time.Unix(0, 0)).
+		SetStartTime(time.Now().Add(-30 * time.Second)).
 		Subscribe(s.client, func(message hiero.TopicMessage) {
 			env, err := UnmarshalEnvelope(message.Contents)
 			if err != nil {

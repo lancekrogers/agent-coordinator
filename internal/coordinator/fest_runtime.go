@@ -80,7 +80,7 @@ func mapExecutionPlan(execPlan festival.ExecutionPlan, inferenceAgentID, defiAge
 			} else {
 				normTask.TaskType = "inference_job"
 				normTask.AssignTo = inferenceAgentID
-				normTask.ModelID = "test-model"
+				normTask.ModelID = "qwen/qwen-2.5-7b-instruct"
 				normTask.Input = fmt.Sprintf("Execute festival task: %s", task.Name)
 			}
 			normSeq.Tasks = append(normSeq.Tasks, normTask)
