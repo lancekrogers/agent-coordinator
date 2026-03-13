@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	pb "github.com/lancekrogers/agent-coordinator-ethden-2026/pkg/daemon/pb"
+	pb "github.com/lancekrogers/agent-coordinator/pkg/daemon/pb"
 )
 
 // GRPCClient implements DaemonClient using gRPC transport.

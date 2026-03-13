@@ -9,8 +9,8 @@ import (
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hts"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hcs"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hts"
 )
 
 // PaymentSettledPayload is the HCS message payload for a payment settlement.

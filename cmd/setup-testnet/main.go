@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hts"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/integration"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hcs"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hts"
+	"github.com/lancekrogers/agent-coordinator/internal/integration"
 )
 
 func main() {

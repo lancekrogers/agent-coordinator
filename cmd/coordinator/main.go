@@ -12,14 +12,14 @@ import (
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/config"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/coordinator"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/festival"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hts"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/schedule"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/pkg/creclient"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/pkg/daemon"
+	"github.com/lancekrogers/agent-coordinator/internal/config"
+	"github.com/lancekrogers/agent-coordinator/internal/coordinator"
+	"github.com/lancekrogers/agent-coordinator/internal/festival"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hcs"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hts"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/schedule"
+	"github.com/lancekrogers/agent-coordinator/pkg/creclient"
+	"github.com/lancekrogers/agent-coordinator/pkg/daemon"
 )
 
 func main() {

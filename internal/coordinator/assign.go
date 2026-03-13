@@ -11,8 +11,8 @@ import (
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/pkg/creclient"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hcs"
+	"github.com/lancekrogers/agent-coordinator/pkg/creclient"
 )
 
 // TaskAssignmentPayload is the payload for a task assignment message.

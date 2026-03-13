@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/coordinator"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hts"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/schedule"
+	"github.com/lancekrogers/agent-coordinator/internal/coordinator"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hcs"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hts"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/schedule"
 )
 
 func TestE2E_FullFestivalCycle(t *testing.T) {

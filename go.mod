@@ -1,4 +1,4 @@
-module github.com/lancekrogers/agent-coordinator-ethden-2026
+module github.com/lancekrogers/agent-coordinator
 
 go 1.24.0
 

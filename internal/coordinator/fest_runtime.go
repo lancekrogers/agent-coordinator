@@ -11,8 +11,8 @@ import (
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/festival"
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
+	"github.com/lancekrogers/agent-coordinator/internal/festival"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hcs"
 )
 
 // FestRuntime builds coordinator plans and dashboard snapshots from fest CLI output.

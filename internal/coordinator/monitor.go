@@ -8,7 +8,7 @@ import (
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/hedera/hcs"
+	"github.com/lancekrogers/agent-coordinator/internal/hedera/hcs"
 )
 
 // StatusUpdatePayload is the payload for agent status update messages.

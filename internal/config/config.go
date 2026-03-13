@@ -6,7 +6,7 @@ import (
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 
-	"github.com/lancekrogers/agent-coordinator-ethden-2026/internal/coordinator"
+	"github.com/lancekrogers/agent-coordinator/internal/coordinator"
 )
 
 // Env holds parsed environment variables for the coordinator.
