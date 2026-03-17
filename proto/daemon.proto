@@ -1,6 +1,6 @@
 syntax = "proto3";
 package daemon;
-option go_package = "github.com/lancekrogers/agent-coordinator-ethden-2026/pkg/daemon/pb";
+option go_package = "github.com/lancekrogers/agent-coordinator/pkg/daemon/pb";
 
 service DaemonService {
   rpc Register(RegisterReq) returns (RegisterResp);

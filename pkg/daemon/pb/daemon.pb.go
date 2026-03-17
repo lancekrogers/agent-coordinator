@@ -420,7 +420,7 @@ const file_daemon_proto_rawDesc = "" +
 	"\rDaemonService\x125\n" +
 	"\bRegister\x12\x13.daemon.RegisterReq\x1a\x14.daemon.RegisterResp\x122\n" +
 	"\aExecute\x12\x12.daemon.ExecuteReq\x1a\x13.daemon.ExecuteResp\x128\n" +
-	"\tHeartbeat\x12\x14.daemon.HeartbeatReq\x1a\x15.daemon.HeartbeatRespBEZCgithub.com/lancekrogers/agent-coordinator/pkg/daemon/pbb\x06proto3"
+	"\tHeartbeat\x12\x14.daemon.HeartbeatReq\x1a\x15.daemon.HeartbeatRespB9Z7github.com/lancekrogers/agent-coordinator/pkg/daemon/pbb\x06proto3"
 
 var (
 	file_daemon_proto_rawDescOnce sync.Once
