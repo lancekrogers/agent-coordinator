@@ -18,6 +18,7 @@ import (
 	"github.com/lancekrogers/agent-coordinator/internal/hedera/hcs"
 	"github.com/lancekrogers/agent-coordinator/internal/hedera/hts"
 	"github.com/lancekrogers/agent-coordinator/internal/hedera/schedule"
+	"github.com/lancekrogers/agent-coordinator/internal/hub"
 	"github.com/lancekrogers/agent-coordinator/pkg/creclient"
 	"github.com/lancekrogers/agent-coordinator/pkg/daemon"
 )
@@ -38,6 +39,22 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	// Start WebSocket hub for dashboard connections.
+	wsHub := hub.New(log)
+	go wsHub.Run(ctx)
+
+	wsPort := os.Getenv("WS_PORT")
+	if wsPort == "" {
+		wsPort = ":8080"
+	} else if wsPort[0] != ':' {
+		wsPort = ":" + wsPort
+	}
+	go func() {
+		if err := hub.ListenAndServe(ctx, wsHub, wsPort, log); err != nil {
+			log.Error("websocket server failed", "error", err)
+		}
+	}()
 
 	// Connect to daemon runtime (optional — agent works standalone if unavailable).
 	daemonClient := connectDaemon(ctx, log, cfg.CoordinatorAccountID.String())
