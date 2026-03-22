@@ -73,6 +73,10 @@ func main() {
 		publisher = mockPub
 		subscriber = hcs.NewMockSubscriber(mockPub)
 		log.Info("HCS mock mode enabled — no Hedera connection")
+
+		// Generate demo events directly to WebSocket hub
+		go hub.RunDemoEvents(ctx, wsHub)
+		log.Info("demo event generator started — broadcasting to WebSocket hub")
 	} else {
 		hederaClient := hiero.ClientForTestnet()
 		hederaClient.SetOperator(cfg.CoordinatorAccountID, cfg.CoordinatorKey)
