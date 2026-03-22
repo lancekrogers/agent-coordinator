@@ -115,9 +115,25 @@ type FestProgressPublisher struct {
 	allowSynthetic bool
 	pollInterval   time.Duration
 	logger         *slog.Logger
+	wsPublisher    WSPublisher // optional WebSocket hub for dashboard
 
 	mu  sync.Mutex
 	seq uint64
+}
+
+// WSPublisher is the interface for broadcasting events to the WebSocket hub.
+// Kept here to avoid importing the hub package (dependency inversion).
+type WSPublisher interface {
+	Publish(event WSEvent)
+}
+
+// WSEvent matches hub.DaemonEvent without importing the hub package.
+type WSEvent struct {
+	Type      string                 `json:"type"`
+	AgentID   string                 `json:"agentId"`
+	AgentName string                 `json:"agentName"`
+	Timestamp string                 `json:"timestamp"`
+	Payload   map[string]interface{} `json:"payload"`
 }
 
 func NewFestProgressPublisher(runtime *FestRuntime, publisher hcs.MessagePublisher, topicID hiero.TopicID, pollInterval time.Duration, allowSynthetic bool, logger *slog.Logger) *FestProgressPublisher {
@@ -135,6 +151,11 @@ func NewFestProgressPublisher(runtime *FestRuntime, publisher hcs.MessagePublish
 		pollInterval:   pollInterval,
 		logger:         logger,
 	}
+}
+
+// SetWSPublisher sets an optional WebSocket publisher for dashboard integration.
+func (p *FestProgressPublisher) SetWSPublisher(ws WSPublisher) {
+	p.wsPublisher = ws
 }
 
 func (p *FestProgressPublisher) Start(ctx context.Context) <-chan error {
@@ -195,6 +216,19 @@ func (p *FestProgressPublisher) publishOnce(ctx context.Context) error {
 
 	if err := p.publisher.Publish(ctx, p.topicID, env); err != nil {
 		return fmt.Errorf("publish festival progress: %w", err)
+	}
+
+	// Also broadcast to WebSocket hub for real-time dashboard updates.
+	if p.wsPublisher != nil {
+		var payloadMap map[string]interface{}
+		json.Unmarshal(payload, &payloadMap)
+		p.wsPublisher.Publish(WSEvent{
+			Type:      "festival_progress",
+			AgentID:   "coord-001",
+			AgentName: "coordinator",
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+			Payload:   payloadMap,
+		})
 	}
 
 	p.logger.Info("festival progress published",

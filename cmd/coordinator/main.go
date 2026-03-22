@@ -114,6 +114,7 @@ func main() {
 		log.Warn("CRE Risk Router not configured, DeFi tasks will be denied (fail-closed)")
 	}
 	monitor := coordinator.NewMonitor(subscriber, cfg.Coordinator.StatusTopicID, nil)
+	monitor.SetWSPublisher(hubAdapter{wsHub})
 	payment := coordinator.NewPayment(transferSvc, publisher, cfg.Coordinator)
 
 	// Agent ID → Hedera account ID for payments.
@@ -192,6 +193,7 @@ func main() {
 		allowSynthetic,
 		log,
 	)
+	progressPublisher.SetWSPublisher(hubAdapter{wsHub})
 	progressErrs := progressPublisher.Start(ctx)
 	go func() {
 		for err := range progressErrs {
@@ -298,6 +300,21 @@ func envInt(name string, defaultVal int) int {
 		return defaultVal
 	}
 	return n
+}
+
+// hubAdapter bridges the coordinator's WSPublisher interface to the hub's Publish method.
+type hubAdapter struct {
+	h *hub.Hub
+}
+
+func (a hubAdapter) Publish(event coordinator.WSEvent) {
+	a.h.Publish(hub.DaemonEvent{
+		Type:      event.Type,
+		AgentID:   event.AgentID,
+		AgentName: event.AgentName,
+		Timestamp: event.Timestamp,
+		Payload:   event.Payload,
+	})
 }
 
 func envDurationSeconds(name string, defaultVal time.Duration) time.Duration {
