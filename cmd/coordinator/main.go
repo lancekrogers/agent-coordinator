@@ -60,35 +60,43 @@ func main() {
 	daemonClient := connectDaemon(ctx, log, cfg.CoordinatorAccountID.String())
 	defer daemonClient.Close()
 
-	// Create Hedera client with coordinator credentials.
-	hederaClient := hiero.ClientForTestnet()
-	hederaClient.SetOperator(cfg.CoordinatorAccountID, cfg.CoordinatorKey)
+	// Initialize HCS publisher/subscriber and Hedera services.
+	// In mock mode, use in-memory implementations and skip HTS/schedule.
+	mockHCS := envBool("MOCK_HCS", false)
 
-	// Initialize HCS publisher and subscriber.
-	publisher := hcs.NewPublisher(hederaClient, hcs.DefaultPublishConfig())
-	subscriber := hcs.NewSubscriber(hederaClient, hcs.DefaultSubscribeConfig())
+	var publisher hcs.MessagePublisher
+	var subscriber hcs.MessageSubscriber
+	var transferSvc *hts.TransferService
 
-	// Initialize HTS transfer service.
-	transferSvc := hts.NewTransferService(hederaClient)
+	if mockHCS {
+		mockPub := hcs.NewMockPublisher()
+		publisher = mockPub
+		subscriber = hcs.NewMockSubscriber(mockPub)
+		log.Info("HCS mock mode enabled — no Hedera connection")
+	} else {
+		hederaClient := hiero.ClientForTestnet()
+		hederaClient.SetOperator(cfg.CoordinatorAccountID, cfg.CoordinatorKey)
+		publisher = hcs.NewPublisher(hederaClient, hcs.DefaultPublishConfig())
+		subscriber = hcs.NewSubscriber(hederaClient, hcs.DefaultSubscribeConfig())
+		transferSvc = hts.NewTransferService(hederaClient)
 
-	// Schedule service — 4th Hedera native service.
-	scheduleSvc := schedule.NewScheduleService(hederaClient)
+		scheduleSvc := schedule.NewScheduleService(hederaClient)
+		heartbeatCfg := schedule.DefaultHeartbeatConfig()
+		heartbeatCfg.AgentID = "coordinator"
+		heartbeatCfg.AccountID = cfg.CoordinatorAccountID
 
-	heartbeatCfg := schedule.DefaultHeartbeatConfig()
-	heartbeatCfg.AgentID = "coordinator"
-	heartbeatCfg.AccountID = cfg.CoordinatorAccountID
-
-	heartbeat, err := schedule.NewHeartbeat(hederaClient, scheduleSvc, heartbeatCfg)
-	if err != nil {
-		log.Error("failed to create heartbeat runner", "error", err)
-		os.Exit(1)
-	}
-	heartbeatErrs := heartbeat.Start(ctx)
-	go func() {
-		for err := range heartbeatErrs {
-			log.Warn("schedule heartbeat error", "error", err)
+		heartbeat, err := schedule.NewHeartbeat(hederaClient, scheduleSvc, heartbeatCfg)
+		if err != nil {
+			log.Error("failed to create heartbeat runner", "error", err)
+			os.Exit(1)
 		}
-	}()
+		heartbeatErrs := heartbeat.Start(ctx)
+		go func() {
+			for err := range heartbeatErrs {
+				log.Warn("schedule heartbeat error", "error", err)
+			}
+		}()
+	}
 
 	// Create coordinator components.
 	inferenceAgentID := "inference-001"
