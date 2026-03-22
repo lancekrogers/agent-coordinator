@@ -24,15 +24,16 @@ func NewServer(ctx context.Context, h *Hub, addr string, log *slog.Logger) *http
 		}
 
 		client := h.RegisterClient(conn)
-		defer h.UnregisterClient(client)
 
-		// WritePump handles outgoing messages and pings.
+		// WritePump handles outgoing messages.
 		go h.WritePump(ctx, client)
 
-		// ReadPump: keep connection alive by reading (handles pong internally).
+		// ReadPump: block until connection closes.
+		// nhooyr.io/websocket handles ping/pong keepalive internally.
 		for {
 			_, _, err := conn.Read(ctx)
 			if err != nil {
+				h.UnregisterClient(client)
 				return
 			}
 		}

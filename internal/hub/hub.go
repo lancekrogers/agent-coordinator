@@ -119,10 +119,8 @@ func (h *Hub) UnregisterClient(client *Client) {
 
 // WritePump sends queued messages to the WebSocket connection.
 // Call this in a goroutine per client.
+// nhooyr.io/websocket handles ping/pong keepalive automatically.
 func (h *Hub) WritePump(ctx context.Context, client *Client) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -131,16 +129,8 @@ func (h *Hub) WritePump(ctx context.Context, client *Client) {
 			if !ok {
 				return
 			}
-			writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			err := client.conn.Write(writeCtx, websocket.MessageText, msg)
-			cancel()
-			if err != nil {
-				h.unregister <- client
-				return
-			}
-		case <-ticker.C:
-			pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			err := client.conn.Ping(pingCtx)
 			cancel()
 			if err != nil {
 				h.unregister <- client
