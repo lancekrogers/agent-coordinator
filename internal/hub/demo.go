@@ -151,6 +151,83 @@ func RunDemoEvents(ctx context.Context, h *Hub) {
 		}
 	}()
 
+	// Vault decisions every 12-25s (mix of GO and NO_GO)
+	go func() {
+		time.Sleep(6 * time.Second)
+		ritualRun := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			ritualRun++
+			ts := time.Now().UTC().Format(time.RFC3339)
+			isGo := rand.Float64() < 0.4
+			confidence := 0.0
+			signal := "NO_SIGNAL"
+			deviationPct := rand.Float64() * 3
+			netProfit := -0.001
+			decision := "NO_GO"
+
+			if isGo {
+				confidence = 0.6 + rand.Float64()*0.3
+				signal = "SELL"
+				if rand.Float64() > 0.5 {
+					signal = "BUY"
+				}
+				deviationPct = 15 + rand.Float64()*30
+				netProfit = 50 + rand.Float64()*200
+				decision = "GO"
+			}
+
+			payload := map[string]interface{}{
+				"timestamp":   ts,
+				"phase":       "discover",
+				"action":      "market_research_ritual",
+				"festival_id": "RI-AM0001",
+				"tools_used":  []string{"uniswap_v3_pool_query", "historical_slot0_sampling", "cre_risk_router_8gate", "obey_vault_state_query"},
+				"decision":    decision,
+				"reasoning": map[string]interface{}{
+					"confidence":              confidence,
+					"deviation_pct":           round(deviationPct, 2),
+					"gates_passed":            fmt.Sprintf("%d/8", 5+rand.Intn(3)),
+					"net_profit_estimate_usd": round(netProfit, 2),
+					"signal":                  signal,
+				},
+				"duration_ms": 120000 + rand.Intn(80000),
+			}
+
+			// Add execution data for GO decisions (sometimes)
+			if isGo && rand.Float64() < 0.5 {
+				payload["phase"] = "execute"
+				payload["action"] = "vault_swap"
+				payload["execution"] = map[string]interface{}{
+					"tx_hash":  fmt.Sprintf("0x%x", rand.Int63()),
+					"chain":    "Base Sepolia",
+					"chain_id": 84532,
+					"token_in": "USDC",
+					"token_out": "WETH",
+					"amount_in":  fmt.Sprintf("%d", 1000000+rand.Intn(9000000)),
+					"amount_out": fmt.Sprintf("%d", rand.Int63n(1000000000000000)),
+				}
+				payload["verification"] = map[string]interface{}{
+					"actual_output":    payload["execution"].(map[string]interface{})["amount_out"],
+					"within_tolerance": true,
+				}
+			}
+
+			h.Publish(DaemonEvent{
+				Type: "vault_decision", AgentID: "defi-001", AgentName: "defi",
+				Timestamp: ts,
+				Payload:   payload,
+			})
+
+			time.Sleep(time.Duration(12+rand.Intn(13)) * time.Second)
+		}
+	}()
+
 	// Risk check flow every 20-40s
 	go func() {
 		time.Sleep(4 * time.Second)
